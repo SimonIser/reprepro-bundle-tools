@@ -1,3 +1,9 @@
+reprepro-bundle-tools (0.0.1+lhm2) walhalla; urgency=medium
+
+  * bundle-compose: let getInfo() always return some none-'None' value
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Tue, 11 Dec 2018 14:44:05 +0100
+
 reprepro-bundle-tools (0.0.1+lhm1) walhalla; urgency=medium
 
   * adjusted for walhalla

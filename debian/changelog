@@ -1,3 +1,9 @@
+reprepro-bundle-tools (0.0.1+lhm3) walhalla; urgency=medium
+
+  * bundle-compose-app: implemented caching for publishedCommits to improve performance and stripped changes list to max 200 entries
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Wed, 12 Dec 2018 14:34:22 +0100
+
 reprepro-bundle-tools (0.0.1+lhm2) walhalla; urgency=medium
 
   * bundle-compose: let getInfo() always return some none-'None' value

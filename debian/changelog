@@ -1,3 +1,18 @@
+reprepro-bundle-tools (0.0.1+lhm4) walhalla; urgency=medium
+
+  * wrong eupl version in a source file
+  * backend: first draft for /apt/requiredAuth
+  * backend: implementation of /api/storeCredentials
+  * backend: implemented credential passing/handling in /api/updateBundles
+  * added encrypted credential transmission between frontend and backend.
+    NOTE: this encryption doesn't protect the transmission itself,
+    it is aimed to protect the credential in the storage - which means
+    that neither frontend nor backend remember all required parts to
+    restore the secret for a long time.
+  * added dependencies needed to build shared module for ng-bundle
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Wed, 09 Jan 2019 14:29:14 +0100
+
 reprepro-bundle-tools (0.0.1+lhm3) walhalla; urgency=medium
 
   * bundle-compose-app: implemented caching for publishedCommits to improve performance and stripped changes list to max 200 entries

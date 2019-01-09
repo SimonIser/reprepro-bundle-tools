@@ -46,6 +46,28 @@ publishedCommitsCache = set()
 publishedCommitsLastHead = None
 
 
+async def handle_required_auth(request):
+    res = list()
+    try:
+        req = common_interfaces.AuthRequired_validate(json.loads(request.rel_url.query['authRequired']))
+        availableRefs = set()
+        for authRef in req['refs']:
+            if common_app_server.is_valid_authRef(authRef):
+                availableRefs.add(authRef['authId'])
+        if "publishChanges" == req['actionId']:
+            '''if not "ldap" in availableRefs:
+                res.append(common_interfaces.AuthType("ldap", "Required to publish changes into the shared GIT-Repository"))'''
+        elif "bundleSync" == req['actionId']:
+            if not "ldap" in availableRefs:
+                res.append(common_interfaces.AuthType("ldap", "Required for the synchronization with the Ticket system. Leave empty to skip trac-synchronisation."))
+                # res.append(common_interfaces.AuthType("ldap", "Required for the shared GIT-Repository recieve the latest status"))
+            # if not "ldapAdmin" in availableRefs:
+            #    res.append(common_interfaces.AuthType("ldapAdmin", "Required to create FAI-Classes for new bundles"))
+        return web.json_response(res)
+    except Exception as e:
+        return web.Response(text="IllegalArgumentsProvided:{}".format(e), status=400)
+
+
 async def handle_latest_published_change(request):
     repo = git.Repo(PROJECT_DIR)
     tracking = repo.head.ref.tracking_branch()
@@ -161,15 +183,33 @@ async def handle_set_target(request):
 
 
 async def handle_update_bundles(request):
+    user, password, ssId = "", "", None
+    try:
+        (user, password, ssId) = common_app_server.get_credentials(request, 'ldap')
+    except Exception as e:
+        return web.Response(text="IllegalArgumentsProvided:{}".format(e), status=400)
     logger.info("handling 'Update Bundles'")
     res = []
     with common_app_server.logging_redirect_for_webapp() as logs:
         try:
             repo = git.Repo(PROJECT_DIR)
             ensure_clean_git_repo(repo)
-            updateBundles()
+            tracApi = None
+            try:
+                if user and len(user) > 0 and password and len(password) > 0:
+                    config = getTracConfig()
+                    tracApi = trac_api.TracApi(config['TracUrl'], user, password)
+                else:
+                    logger.warn("Skipping synchronisation with trac as there are no/empty credentials specified.")
+                    common_app_server.invalidate_credentials(ssId)
+            except KeyError as e:
+                logger.warn("Missing Key {} in config file '{}' --> no synchronization with trac will be done!".format(e, config['__file__']))
+            updateBundles(tracApi)
             git_commit(repo, [BUNDLES_LIST_FILE], "UPDATED {}".format(BUNDLES_LIST_FILE))
         except GitNotCleanException as e:
+            logger.error(e)
+        except Exception as e:
+            common_app_server.invalidate_credentials(ssId)
             logger.error(e)
         finally:
             res = logs.toBackendLogEntryList()
@@ -241,6 +281,7 @@ def registerRoutes(args, app):
         web.get('/api/latestPublishedChange', handle_latest_published_change),
         web.get('/api/undoLastChange', handle_undo_last_change),
         web.get('/api/publishChanges', handle_publish_changes),
+        web.get('/api/requiredAuth', handle_required_auth),
     ])
     if not args.no_static_files:
         app.router.add_routes([

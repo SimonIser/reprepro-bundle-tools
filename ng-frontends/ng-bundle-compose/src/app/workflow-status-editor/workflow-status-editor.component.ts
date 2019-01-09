@@ -1,20 +1,20 @@
 /***********************************************************************
-* Copyright (c) 2018 Landeshauptstadt München
-*           (c) 2018 Christoph Lutz (InterFace AG)
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the European Union Public Licence (EUPL),
-* version 1.1 (or any later version).
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* European Union Public Licence for more details.
-*
-* You should have received a copy of the European Union Public Licence
-* along with this program. If not, see
-* https://joinup.ec.europa.eu/collection/eupl/eupl-text-11-12
-***********************************************************************/
+ * Copyright (c) 2018 Landeshauptstadt München
+ *           (c) 2018 Christoph Lutz (InterFace AG)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the European Union Public Licence (EUPL),
+ * version 1.1 (or any later version).
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * European Union Public Licence for more details.
+ *
+ * You should have received a copy of the European Union Public Licence
+ * along with this program. If not, see
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-11-12
+ ***********************************************************************/
 
 import { Component, OnInit, OnDestroy, HostListener } from "@angular/core";
 import {
@@ -23,7 +23,10 @@ import {
   SelectFilterComponent,
   BackendLogEntry,
   UnpublishedChangesComponent,
-  VersionedChangesService
+  BundleDialogService,
+  AuthenticationService,
+  VersionedChangesService,
+  AuthRef
 } from "shared";
 import { WorkflowMetadataService } from "../services/workflow-metadata.service";
 import { Router } from "@angular/router";
@@ -56,6 +59,7 @@ export class WorkflowStatusEditorComponent implements OnInit, OnDestroy {
 
   constructor(
     private workflowMetadataService: WorkflowMetadataService,
+    private authenticationService: AuthenticationService,
     public changesService: VersionedChangesService,
     public managedBundleService: ManagedBundleService,
     public actionService: BundleComposeActionService,
@@ -190,9 +194,24 @@ export class WorkflowStatusEditorComponent implements OnInit, OnDestroy {
     this.actionService.markForStatus(status, bundles);
   }
 
-  synchronizeBundles(event) {
-    console.log("synchronizeBundles: " + JSON.stringify(event));
-    this.actionService.updateBundles();
+  synchronizeBundles() {
+    console.log("synchronizeBundles called");
+    this.authenticationService.callWithRequiredAuthentications(
+      "bundleSync",
+      (refs: AuthRef[]) => {
+        this.actionService.updateBundles(refs);
+      }
+    );
+  }
+
+  publishChanges() {
+    console.log("publishChanges called");
+    this.authenticationService.callWithRequiredAuthentications(
+      "publishChanges",
+      (refs: AuthRef[]) => {
+        this.actionService.publishChanges();
+      }
+    );
   }
 
   navigateTo(bundle: ManagedBundle): void {

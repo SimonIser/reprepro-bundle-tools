@@ -34,12 +34,17 @@ import os
 import io
 import queue
 import subprocess
+import uuid
+import json
+import binascii
+import Crypto
+from Crypto.Cipher import AES
 from aiohttp import web
 from aiohttp.web import run_app
 import asyncio
 import apt_repos
+from reprepro_bundle_appserver import common_interfaces, IllegalArgumentException
 from reprepro_bundle_compose import PROJECT_DIR
-from reprepro_bundle_appserver.common_interfaces import BackendLogEntry
 
 PROGNAME = "common_app_server"
 logger = logging.getLogger(__name__)
@@ -50,6 +55,7 @@ RE_REGISTER_DELAY_SECONDS = 2
 
 events = set()
 registeredClients = set()
+__storedPwds = dict() # storageId -> encryptedPwd
 
 
 def setupLogging(loglevel):
@@ -142,6 +148,23 @@ async def websocket_handler(request):
     return ws
 
 
+async def handle_store_credentials(request):
+    global __storedPwds
+    res = list()
+    try:
+        refs = common_interfaces.AuthRefList_validate(json.loads(request.rel_url.query['refs']))
+        pwds = json.loads(request.rel_url.query['pwds'])
+        for x, authRef in enumerate(refs):
+            slotId = str(uuid.uuid4())
+            authRef['storageSlotId'] = slotId
+            __storedPwds[slotId] = pwds[x]
+            res.append(authRef)
+            logger.info("stored encrypted password for authId '{}'".format(authRef.get('authId')))
+        return web.json_response(res)
+    except Exception as e:
+        return web.Response(text="IllegalArgumentsProvided:{}".format(e), status=400)
+
+
 async def handle_register(request):
     global registeredClients
     uuid = request.rel_url.query['uuid']
@@ -161,7 +184,7 @@ async def handle_unregister(request):
         return web.json_response("unregistered")
     else:
         logger.debug("ignoring unregister unknown frontend with uuid '{}'".format(uuid))
-        return web.json_response("error")
+        return web.json_response("error", status=400)
 
 
 def stop_backend_if_unused():
@@ -187,7 +210,8 @@ async def run_webserver(args, registerAdditionalRoutes=None, serveDistPath=None)
         # api routes
         web.get('/api/log', websocket_handler),
         web.get('/api/unregister', handle_unregister),
-        web.get('/api/register', handle_register)
+        web.get('/api/register', handle_register),
+        web.get('/api/storeCredentials', handle_store_credentials)
     ])
     if registerAdditionalRoutes:
         registerAdditionalRoutes(args, app)
@@ -208,11 +232,55 @@ async def run_webserver(args, registerAdditionalRoutes=None, serveDistPath=None)
     return (started, runner, url)
 
 
+def is_valid_authRef(authRef):
+    global __storedPwds
+    return authRef['storageSlotId'] in __storedPwds
+
+
+def invalidate_credentials(storageSlotId):
+    global __storedPwds
+    __storedPwds.pop(storageSlotId, None)
+
+
+def get_credentials(request, authId):
+    global __storedPwds
+    authRefs = common_interfaces.AuthRefList_validate(json.loads(request.rel_url.query['refs']))
+    ref = None
+    for x, r in enumerate(authRefs):
+        if r['authId'] == authId:
+            ref = r
+            break
+    if not ref:
+        raise IllegalArgumentException("No AuthRef for authId='{}' found.".format(authId))
+    slotId = ref['storageSlotId']
+    aesCipherParamsStr = __storedPwds[slotId]
+    username = ref['user']
+    try:
+        pwd = decrypt(aesCipherParamsStr, ref['key'])
+    except Exception as e:
+        logger.error("Could not decrypt Credentials for user {}: {}".format(username, e))
+        logger.exception(e)
+        return(username, None, slotId)
+    #logger.info("Got credentials user, pwd: '{}', '{}'".format(username, pwd))
+    return (username, pwd, slotId)
+
+
+def decrypt(aesCipherParamsStr, key):
+    aesCipherParams = json.loads(aesCipherParamsStr)
+    #logger.info(f"Params: '{aesCipherParams}'', Key: '{key}'")
+    cipher = binascii.a2b_hex(aesCipherParams["cipher"])
+    iv =     binascii.a2b_hex(aesCipherParams["iv"])
+    key =    binascii.a2b_hex(key)
+    aes = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CFB, iv, segment_size=128)
+    res = aes.decrypt(cipher)
+    return res.decode("utf-8")
+
+
 class WebappLoggingHandler(logging.handlers.QueueHandler):
     def toBackendLogEntryList(self):
         res = list()
         while not self.queue.empty():
-          res.append(BackendLogEntry(self.queue.get()))
+          res.append(common_interfaces.BackendLogEntry(self.queue.get()))
         return res
 
 

@@ -77,3 +77,20 @@ export interface TargetDescription {
   value: string,
   description: string
 }
+
+export interface AuthType {
+  authId: string,
+  requiredFor: string
+}
+
+export interface AuthRef {
+  authId: string,
+  user: string,
+  storageSlotId: string, // comes from the server
+  key: string, // empty unless we got storageSlotId
+}
+
+export interface AuthRequired {
+  actionId: string,
+  refs: AuthRef[]
+}

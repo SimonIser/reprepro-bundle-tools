@@ -1,3 +1,9 @@
+reprepro-bundle-tools (0.0.1+lhm5) walhalla; urgency=medium
+
+  * added python3-crypto dependency to binary package python3-reprepro-bundle-tools
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Wed, 09 Jan 2019 17:10:39 +0100
+
 reprepro-bundle-tools (0.0.1+lhm4) walhalla; urgency=medium
 
   * wrong eupl version in a source file

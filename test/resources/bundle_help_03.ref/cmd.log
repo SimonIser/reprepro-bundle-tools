@@ -3,8 +3,9 @@ usage: bundle edit [-h] [--own-suite OWN_SUITE] [--no-apt-update]
                    [--reference-suites REFERENCE_SUITES]
                    [--highlighted-suites HIGHLIGHTED_SUITES]
                    [--add-from ADD_FROM] [--upgrade-from UPGRADE_FROM]
-                   [--batch] [--commit] [--clean-commit]
-                   [--git-repo-url GIT_REPO_URL] [--git-branch GIT_BRANCH]
+                   [--no-upgrade-keep-component] [--batch] [--commit]
+                   [--clean-commit] [--git-repo-url GIT_REPO_URL]
+                   [--git-branch GIT_BRANCH]
                    bundleName
 
 Subcommand edit: Add / Remove/ Upgrade/ Downgrade packages to/in the bundle by
@@ -44,7 +45,7 @@ advanced suites control parameters:
                         Comma separated list of Suite-Selectors that define
                         suites whose entries should be put on top of the
                         sources_control.list. The default value is
-                        'bundle:{bundle}'.
+                        'bundle:{bundle},user-{user}:{distribution}'.
 
 sub command 'edit' specific options:
   --add-from ADD_FROM   Comma separated list of Suite-Selectors that define
@@ -55,6 +56,16 @@ sub command 'edit' specific options:
                         suites whose (upgradable) packages are automatically
                         upgraded if they already exist in the reference-
                         suites.
+  --no-upgrade-keep-component
+                        If not set, when doing a package upgrade via
+                        --upgrade-from only those packages will be upgraded
+                        that are keeping their physical component (which means
+                        after upgrade the package will resist in the same
+                        component as before). In case the component of a
+                        package has changed in the supplier suite or if the
+                        new component doesn't match the current component in
+                        the reference suite, the package will not be
+                        automatically upgraded and a warning will be reported.
   --batch               Run in batch mode which means without user
                         interaction.
 

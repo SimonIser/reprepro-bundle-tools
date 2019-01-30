@@ -40,6 +40,7 @@ from contextlib import contextmanager
 
 CANCEL_REMARK = "# Note: clean this file completely to CANCEL this current '{action}' action\n"
 
+import reprepro_bundle
 from reprepro_bundle import BundleError
 from .update_rule import UpdateRule
 from .bundle import Bundle
@@ -48,8 +49,7 @@ APT_REPOS_CMD = "apt-repos/bin/apt-repos"
 if not os.path.exists(APT_REPOS_CMD):
     APT_REPOS_CMD = "apt-repos"
 
-progname = "bundle"
-logger = logging.getLogger(progname)
+logger = logging.getLogger(reprepro_bundle.PROGNAME)
 
 
 def setupLogging(loglevel):
@@ -66,10 +66,11 @@ def setupLogging(loglevel):
 
 
 def main():
-    DEFAULT_SUPPLIERS = "{distribution}-supplier:,user-{user}:{distribution}"
+    DEFAULT_USER_REPO = "user-{user}:{distribution}"
+    DEFAULT_SUPPLIERS = "{distribution}-supplier:," + DEFAULT_USER_REPO
     DEFAULT_REFERENCES = "{distribution}-reference:,bundle:{bundle}"
     DEFAULT_OWN_SUITE = "bundle:{bundle}"
-    DEFAULT_HIGHLIGHTED = DEFAULT_OWN_SUITE
+    DEFAULT_HIGHLIGHTED = DEFAULT_OWN_SUITE + "," + DEFAULT_USER_REPO
 
     GIT_REPO_URL = getGitRepoUrl('origin', None)
     GIT_BRANCH = 'master'
@@ -80,10 +81,11 @@ def main():
         if ("-h" in sys.argv or "--help" in sys.argv) and subcmd in sys.argv:
             sys.argv.append(".")
 
-    parser = argparse.ArgumentParser(description=__doc__, prog=progname, add_help=False)
+    parser = argparse.ArgumentParser(description=__doc__, prog=reprepro_bundle.PROGNAME, add_help=False)
     parser.add_argument("-h", "--help", action="store_true", help="""
                         Show a (subcommand specific) help message""")
     parser.add_argument("-d", "--debug", action="store_true", default=False, help="Show debug messages.")
+    parser.add_argument("--no-info", action="store_true", default=False, help="Just show warnings and errors.")
     subparsers = parser.add_subparsers(help='choose one of these subcommands')
     parser.set_defaults(debug=False)
 
@@ -137,6 +139,12 @@ def main():
         g.add_argument("--upgrade-from", default=None, help="""
                         Comma separated list of Suite-Selectors that define suites whose (upgradable) packages are automatically upgraded if they
                         already exist in the reference-suites.""")
+        g.add_argument("--no-upgrade-keep-component", action="store_true", default=False, help="""
+                        If not set, when doing a package upgrade via --upgrade-from only those packages will
+                        be upgraded that are keeping their physical component (which means after upgrade the package will resist
+                        in the same component as before). In case the component of a package has changed in the supplier
+                        suite or if the new component doesn't match the current component in the reference suite,
+                        the package will not be automatically upgraded and a warning will be reported.""")
         g.add_argument("--batch", action="store_true", default=False, help="""Run in batch mode which means without user interaction.""")
 
     for p in [parse_init, parse_edit, parse_meta, parse_black, parse_seal, parse_clone, parse_apply, parse_repos]:
@@ -179,7 +187,7 @@ def main():
     parser.set_defaults()
 
     args = parser.parse_args()
-    setupLogging(logging.DEBUG if args.debug else logging.INFO)
+    setupLogging(logging.DEBUG if args.debug else logging.WARN if args.no_info else logging.INFO)
 
     if "sub_function" in args.__dict__:
         if args.help:
@@ -270,7 +278,7 @@ def cmd_show(args):
     '''
         Subcommand show: Give an overview about the bundle mata-data and it's content.
     '''
-    bundle = setupContext(args, False)
+    bundle = setupContext(args, require_editable=False)
     print_metadata(bundle)
     list_content(bundle)
 
@@ -279,7 +287,7 @@ def cmd_list(args):
     '''
         Subcommand list: List the content - the packages - of a bundle.
     '''
-    bundle = setupContext(args, False)
+    bundle = setupContext(args, require_editable=False)
     list_content(bundle)
 
 
@@ -287,7 +295,9 @@ def cmd_seal(args):
     '''
         Subcommand seal: Mark the bundle as ReadOnly and change a suite's tag from 'staging' to 'deploy'.
     '''
-    bundle = setupContext(args)
+    bundle = setupContext(args, require_own_suite=True)
+    if len(bundle.queryBinaryPackages()) == 0:
+        raise BundleError("Sorry, the bundle {} is empty and you can't seal an empty bundle!".format(bundle))
     with choose_commit_context(bundle, args, "SEALED bundle '{bundleName}'") as (bundle, git_add):
         infofile = edit_meta(bundle, CANCEL_REMARK.format(action="seal"))
         if not infofile:
@@ -296,13 +306,24 @@ def cmd_seal(args):
         git_add.append(bundle.updateInfofile(rollout=True))
         git_add.append(create_reprepro_config(bundle, readOnly=True))
         git_add.append(updateReposConfig())
+    sealedHook = reprepro_bundle.getHooksConfig().get('bundle_sealed', None)
+    if sealedHook:
+        info = bundle.getInfo()
+        target = "{}".format(info.get("Target", "no-target"))
+        subject = info.get("Releasenotes", "--no-subject--").split("\n")[0]
+        cmd = [arg.format(bundleName=bundle.bundleName, bundleSuiteName=bundle.getOwnSuiteName(), subject=subject, target=target) for arg in sealedHook.split()]
+        logger.info("Calling bundle_sealed hook '{}'".format(" ".join(cmd)))
+        try:
+            subprocess.check_call(cmd)
+        except Exception as e:
+            logger.warning("Hook execution failed: {}".format(e))
 
 
 def cmd_apply(args):
     '''
         Subcommand apply: Use reprepro to update the bundle - This action typically runs on the reprepro server and not locally (besides for testing purposes)
     '''
-    bundle = setupContext(args, False)
+    bundle = setupContext(args, require_editable=False)
     if not bundle.isEditable():
         logger.warning("Skipping command 'apply' for {} as it is already sealed.".format(bundle))
         return
@@ -333,7 +354,7 @@ def cmd_clone(args):
     '''
         Subcommand clone: Clones the bundle bundleName into a new bundle (with an automatically created number) for the same distribution.
     '''
-    bundle = setupContext(args, False)
+    bundle = setupContext(args, require_editable=False)
     print(bundle.getOwnSuiteName())
     with choose_commit_context(None, args, "CLONED bundle '{srcBundleName} --> '{bundleName}'".format(srcBundleName=bundle.bundleName, bundleName="{bundleName}"), bundle.distribution) as (newBundle, git_add):
         git_add.append(create_reprepro_config(newBundle))
@@ -364,8 +385,9 @@ def cmd_bundles(args):
             editable = "EDITABLE" if bundle.isEditable() else "READONLY"
             info = bundle.getInfo()
             target = "[{}]".format(info.get("Target", "no-target"))
+            creator = "({})".format(info.get("Creator", "unknown-creator"))
             subject = info.get("Releasenotes", "--no-subject--").split("\n")[0]
-            print(" ".join((bundle.bundleName, editable, target, subject)))
+            print(" ".join((bundle.bundleName, editable, target, subject, creator)))
 
 
 def scanBundles():
@@ -416,7 +438,7 @@ def updateReposConfig():
     return confFile
 
 
-def setupContext(args, require_editable=True):
+def setupContext(args, require_editable=True, require_own_suite=False):
     bundle = Bundle(args.bundleName[0])
     if require_editable and not bundle.isEditable():
         raise BundleError("Not allowed to modify bundle '{}' as it is readonly!".format(bundle.bundleName))
@@ -427,6 +449,8 @@ def setupContext(args, require_editable=True):
     try:
         bundle.setOwnSuite(args.own_suite)
     except BundleError as e:
+        if require_own_suite:
+            raise e
         logger.warning("Could not set Own-Suite: {}".format(e))
     return bundle
 
@@ -445,9 +469,10 @@ def update_sources_control_list(bundle, args, cancel_remark=None):
     highlightedSuites.extend(upgradeFrom)
     highlightedSuites.extend(addFrom)
     sourcesDict = bundle.parseSourcesControlList()
+    upgrade_keep_component = not args.no_upgrade_keep_component if "no_upgrade_keep_component" in args.__dict__ else True
     with apt_repos.suppress_unwanted_apt_pkg_messages() as forked:
         if forked:
-            bundle.updateSourcesControlList(supplierSuites, refSuites, sourcesDict, highlightedSuites, addFrom, upgradeFrom, args.no_apt_update, cancel_remark)
+            bundle.updateSourcesControlList(supplierSuites, refSuites, sourcesDict, highlightedSuites, addFrom, upgradeFrom, upgrade_keep_component, args.no_apt_update, cancel_remark)
     return bundle.scl
 
 

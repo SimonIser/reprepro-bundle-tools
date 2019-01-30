@@ -1,8 +1,21 @@
 reprepro-bundle-tools (0.0.1+lhm5) walhalla; urgency=medium
 
-  * added python3-crypto dependency to binary package python3-reprepro-bundle-tools
+  * bundle-compose-app: added python3-crypto dependency to binary package python3-reprepro-bundle-tools
 
- -- Christoph Lutz <christoph.lutz@interface-ag.de>  Wed, 09 Jan 2019 17:10:39 +0100
+  * bundle-compose: new apt-repos version using PackageField.PHYSICAL_COMPONENT
+  * bundle-compose: put update-rules in separate lines within the distributions-file
+  * bundle-compose: introduced creation of 'dynamic-distibutions' file to separate static and
+                    dynamic parts of a target repo configuration
+  * bundle-compose: renamed .trac.conf -> .bundle-compose.trac.conf
+
+  * bundle: added creator to output of ./bundle lsb
+  * bundle: new switches --no-info and --no-upgrade-keep-component to prevent component changes during package updates
+  * bundle: added hook mechanism for bundle_sealed events
+  * bundle: providing some more infos to the sealed-hook
+  * bundle: added some sanity checks that are done before 'bundle seal'
+  * bundle: added user-repos to default --highlighted-suites
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Wed, 30 Jan 2019 13:51:38 +0100
 
 reprepro-bundle-tools (0.0.1+lhm4) walhalla; urgency=medium
 

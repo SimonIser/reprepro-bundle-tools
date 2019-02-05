@@ -35,6 +35,7 @@ import subprocess
 import shutil
 import apt_pkg
 import apt_repos
+import time
 from contextlib import contextmanager
 
 
@@ -113,6 +114,11 @@ def main():
     parse_clone.set_defaults(sub_function=cmd_clone, sub_parser=parse_clone)
     parse_bundles.set_defaults(sub_function=cmd_bundles, sub_parser=parse_bundles)
     parse_repos.set_defaults(sub_function=cmd_update_repos_config, sub_parser=parse_repos)
+
+    for p in [parse_list]:
+        p.add_argument("--wait", "-w", action="store_true", default=False, help="""
+                            print the list and actively wait (retrying the command again in the background)
+                            until the list output changes. Then print the new list and exit""")
 
     for p in [parse_init, parse_edit, parse_black, parse_meta, parse_seal, parse_clone, parse_apply, parse_show, parse_list]:
         p.add_argument("--own-suite", default=DEFAULT_OWN_SUITE, help="""
@@ -280,7 +286,7 @@ def cmd_show(args):
     '''
     bundle = setupContext(args, require_editable=False)
     print_metadata(bundle)
-    list_content(bundle)
+    print(get_bundle_list(bundle, ""))
 
 
 def cmd_list(args):
@@ -288,7 +294,28 @@ def cmd_list(args):
         Subcommand list: List the content - the packages - of a bundle.
     '''
     bundle = setupContext(args, require_editable=False)
-    list_content(bundle)
+    logging.getLogger("apt_repos").setLevel(logging.ERROR)
+    wait = True
+    cur = None
+    extraBr = ''
+    while wait:
+        try:
+            bundle.setOwnSuite(args.own_suite)
+        except BundleError:
+            pass
+        res = get_bundle_list(bundle, "")
+        if cur != res:
+            if cur != None:
+                wait = False
+            if len(res) > 0:
+                print("{}\n{}".format(extraBr, res))
+            cur = res
+        else:
+            wait = args.wait
+            if wait:
+                print(" waiting for change…", end='', flush=True)
+                extraBr = '\n'
+                time.sleep(5)
 
 
 def cmd_seal(args):
@@ -451,7 +478,7 @@ def setupContext(args, require_editable=True, require_own_suite=False):
     except BundleError as e:
         if require_own_suite:
             raise e
-        logger.warning("Could not set Own-Suite: {}".format(e))
+        logger.warning(e)
     return bundle
 
 
@@ -518,9 +545,11 @@ def print_metadata(bundle):
         print("".join(tmp.readlines()), flush=True)
 
 
-def list_content(bundle):
+def get_bundle_list(bundle, fallback=None):
     if bundle.getOwnSuiteName():
-        subprocess.check_call([APT_REPOS_CMD, "-b .apt-repos", "ls", "-s", bundle.getOwnSuiteName(), "-r", "." ])
+        with open("/dev/null", "w") as devnull:
+            return subprocess.check_output([APT_REPOS_CMD, "-b .apt-repos", "ls", "-s", bundle.getOwnSuiteName(), "-r", "." ], stderr=devnull).decode('utf-8')
+    return fallback
 
 
 def getGitRepoUrl(alias, default):
@@ -703,6 +732,9 @@ if __name__ == "__main__":
     try:
         main()
         sys.exit(0)
-    except (BundleError) as e:
+    except BundleError as e:
         logger.error(str(e))
+        sys.exit(1)
+    except KeyboardInterrupt as e:
+        logger.info("Stopping due to keyboard interrupt.")
         sys.exit(1)

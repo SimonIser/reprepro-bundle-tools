@@ -1,1 +1,12 @@
-../test/.apt-repos/bundle.repos
+[
+   {
+    "Repository" : "Bundle-Repositories for walhalla",
+    "Oid" : "bundle-repositories-walhalla",
+    "Prefix" : "bundle",
+    "Tags" : [ "wal" ],
+    "Codename" : "walhalla",
+    "Url" : "http://depot.tvc.muenchen.de/rollout/bundles",
+    "Architectures" : [ "i386", "amd64" ],
+    "DebSrc": false
+   }
+]

@@ -92,7 +92,7 @@ class Bundle():
             if len(suites) > 0:
                 self._ownSuite = sorted(suites)[0]
         if not self._ownSuite:
-            raise BundleError("Could not connect bundle '{}' to it's apt-repos suite '{}'.".format(self.bundleName, selector))
+            raise BundleError("Could not connect bundle '{}' to it's own apt-repos suite '{}'.".format(self.bundleName, selector))
 
 
     def getOwnSuiteName(self):
@@ -207,7 +207,7 @@ class Bundle():
                     updateRules=" ".join([r.getRuleName() for r in updateRules])))
         # creating conf/updates file
         updatesSkel = self._templateEnv.get_template("updates.skel")
-        blacklistFile = self._blacklist if os.path.exists(self.getBlacklistFile()) else ""
+        blacklistFile = self._blacklist if os.path.exists(self.getBlacklistFile()) else None
         with open(self.getUpdatesFile(), "w") as fh:
             print("\n".join([r.getUpdateRule(updatesSkel, self.getOwnSuiteName(), blacklistFile) for r in updateRules]), file=fh)
         # remove old FilterSrcLists:
@@ -294,6 +294,25 @@ class Bundle():
         if os.path.isfile(self.scl):
             sourcesDict = self.parseSourcesControlList()
             self._writeSourcesControlList(sourcesDict, dict())
+
+
+    def getApplicationStatus(self):
+        '''
+            This method reads the sources control list and returns a set of all
+            source package names marked with PackageStatus.SHOULD_BE_KEPT
+            (= applied packages) and a set of all source packages names with
+            a different PackageStatus (= not applied packages).
+        '''
+        applied = set()
+        not_applied = set()
+        scl = self.parseSourcesControlList()
+        for source, pkgs in sorted(scl.items()):
+            for pkg in pkgs:
+                if pkg.getPackageStatus() == PackageStatus.SHOULD_BE_KEPT:
+                    applied.add(source)
+                else:
+                    not_applied.add(source)
+        return applied, not_applied
 
 
     def normalizeBlacklist(self):

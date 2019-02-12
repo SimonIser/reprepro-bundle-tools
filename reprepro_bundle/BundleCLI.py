@@ -323,8 +323,13 @@ def cmd_seal(args):
         Subcommand seal: Mark the bundle as ReadOnly and change a suite's tag from 'staging' to 'deploy'.
     '''
     bundle = setupContext(args, require_own_suite=True)
-    if len(bundle.queryBinaryPackages()) == 0:
+    sourcesInReprepro = set([list(p.getData())[0] for p in bundle.queryBinaryPackages(packageFields="C")])
+    if len(sourcesInReprepro) == 0:
         raise BundleError("Sorry, the bundle {} is empty and you can't seal an empty bundle!".format(bundle))
+    (applied, not_applied) = bundle.getApplicationStatus()
+    applied_diff = sourcesInReprepro.symmetric_difference(applied)
+    if len(applied_diff) > 0 or len(not_applied) > 0:
+        raise BundleError("Sorry, the sources_control.list is not (yet?) fully applied to the reprepro-repository! Differences found for " + ", ".join(sorted(applied_diff | not_applied)))
     with choose_commit_context(bundle, args, "SEALED bundle '{bundleName}'") as (bundle, git_add):
         infofile = edit_meta(bundle, CANCEL_REMARK.format(action="seal"))
         if not infofile:
@@ -356,11 +361,13 @@ def cmd_apply(args):
         return
     create_reprepro_config(bundle)
     repreproCmd = os.environ.get("REPREPRO_CMD", "reprepro")
+    if not bundle.getOwnSuiteName():
+        logger.info("Trying to set the bundle's apt-repos suite after exporting the reprepro.")
+        cmd = [repreproCmd, "-b", "repo/bundle/{}".format(bundle.bundleName), "export"]
+        logger.info("Executing '{}'".format(" ".join(cmd)))
+        subprocess.check_call(cmd)
+        bundle.setOwnSuite(args.own_suite)
     cmd = [repreproCmd, "-b", "repo/bundle/{}".format(bundle.bundleName), "--noskipold", "update"]
-    logger.info("Executing '{}'".format(" ".join(cmd)))
-    subprocess.check_call(cmd)
-    # also export because in case lists are empty update won't create a Release file
-    cmd = [repreproCmd, "-b", "repo/bundle/{}".format(bundle.bundleName), "export"]
     logger.info("Executing '{}'".format(" ".join(cmd)))
     subprocess.check_call(cmd)
     with choose_commit_context(bundle, args, "APPLIED changes on bundle '{bundleName}'") as (bundle, git_add):

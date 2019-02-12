@@ -1,3 +1,23 @@
+reprepro-bundle-tools (0.0.1+lhm6) walhalla; urgency=medium
+
+  * fixed debian build
+  * bundle: added new switch 'bundle ls -w …' to do some active waiting for server-changes
+  * bundle: improved 'bundle ls -w' behaviour if bundle is not yet configured
+  * test: example target repo now also contains sources
+  * renamed missleading 'reference_updates.skel' to better name 'bundle-base_updates.skel'
+  * draft for a new debian package apt-add-bundle
+  * added bundle-repos config for the lhm backbone
+  * bundle: another more sanity check - deny seal if sources_control.list is not fully applied to the bundle's reprepro-repository
+  * bundle: fixed invalid source_control.list creation bug in 'bundle apply' by rescanning the bundle's ownSuite after 'reprepro export'
+  * ng-bundle-compose: styling improvements on the managed-bundle-card
+    - hovering feels less "wild" now
+    - bundle title spans over complete card width
+    - klick on ticket-link doesn't navigate to the bundle
+  * added .angulardoc.json to gitignore
+  * fixed: removing a package did not delete binaries because of empty FilterList-Rule
+
+ -- Christoph Lutz <christoph.lutz@interface-ag.de>  Tue, 12 Feb 2019 18:26:51 +0100
+
 reprepro-bundle-tools (0.0.1+lhm5) walhalla; urgency=medium
 
   * bundle-compose-app: added python3-crypto dependency to binary package python3-reprepro-bundle-tools

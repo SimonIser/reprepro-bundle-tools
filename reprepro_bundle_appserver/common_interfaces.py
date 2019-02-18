@@ -21,6 +21,20 @@
 '''
 from urllib.parse import urljoin
 import re
+bundleRe = re.compile(r"bundle:(\w+)\/(\d+)")
+
+def BundleID_validate(data):
+    match = bundleRe.match(data)
+    if match:
+        return match.group(1), match.group(2)
+    raise TypeError("invalid bundleID")
+
+def BundleIDs_validate(data):
+    if isinstance(data, list):
+        for bid in data:
+            BundleID_validate(bid)
+        return data
+    raise TypeError("invalid bundleIDs")
 
 def Bundle(bundle):
     info = bundle.getInfo() or dict()
@@ -42,9 +56,7 @@ def BundleMetadata(bundle):
         'releasenotes': rnParts[2] if (len(rnParts) == 3) else "",
     }
 
-def ManagedBundle(bundle, **kwargs):
-    tracBaseUrl = kwargs.get('tracBaseUrl')
-
+def ManagedBundle(bundle, tracBaseUrl=None):
     ticket = ""
     ticketUrl = ""
     if tracBaseUrl and bundle.getTrac():
@@ -52,20 +64,21 @@ def ManagedBundle(bundle, **kwargs):
             tracBaseUrl += "/"
         ticket = bundle.getTrac()
         ticketUrl = urljoin(tracBaseUrl, "ticket/{}".format(ticket))
+    (dist, _) = BundleID_validate(bundle.getID())
 
     return {
         'id': bundle.getID(),
-        'distribution': bundle.getAptSuite() or "unknown",
+        'distribution': bundle.getAptSuite() or dist,
         'status': WorkflowMetadata(bundle.getStatus()),
         'target': bundle.getTarget(),
         'ticket': ticket,
         'ticketUrl': ticketUrl
     }
 
-def ManagedBundleInfo(bundle, **kwargs):
+def ManagedBundleInfo(bundle, tracBaseUrl=None):
     info = bundle.getInfo() or dict()
     return {
-        'managedBundle': ManagedBundle(bundle, **kwargs),
+        'id': bundle.getID(),
         'basedOn': info.get("BasedOn"),
         'subject': info.get("Releasenotes", "--no-subject--").split("\n", 1)[0],
         'creator': info.get("Creator", "unknown"),

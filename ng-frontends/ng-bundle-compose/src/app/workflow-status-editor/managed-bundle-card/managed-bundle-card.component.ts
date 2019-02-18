@@ -16,16 +16,20 @@
 * https://joinup.ec.europa.eu/collection/eupl/eupl-text-11-12
 ***********************************************************************/
 
-import { Component, OnInit, Input, Output, EventEmitter } from "@angular/core";
+import { Component, OnInit, Input, Output, EventEmitter, ChangeDetectionStrategy } from "@angular/core";
 import { ManagedBundleInfo, ManagedBundle, WorkflowMetadata } from "shared";
 
 @Component({
   selector: "app-managed-bundle-card",
   templateUrl: "./managed-bundle-card.component.html",
-  styleUrls: ["./managed-bundle-card.component.css"]
+  styleUrls: ["./managed-bundle-card.component.css"],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ManagedBundleCardComponent implements OnInit {
-  active: false;
+  active = false;
+
+  @Input()
+  bundle: ManagedBundle;
 
   @Input()
   info: ManagedBundleInfo;
@@ -39,7 +43,7 @@ export class ManagedBundleCardComponent implements OnInit {
   @Output()
   markedForStage = new EventEmitter<{
     stage: WorkflowMetadata;
-    bundles: ManagedBundle[];
+    bundles: string[];
   }>();
 
   @Output()
@@ -51,11 +55,11 @@ export class ManagedBundleCardComponent implements OnInit {
   markForStage(status) {
     this.markedForStage.next({
       stage: status,
-      bundles: [ this.info.managedBundle ]
+      bundles: [ this.bundle.id ]
     });
   }
 
   emitClicked() {
-    this.clicked.next(this.info.managedBundle);
+    this.clicked.next(this.bundle);
   }
 }

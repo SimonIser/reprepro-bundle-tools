@@ -26,6 +26,7 @@ import logging
 import subprocess
 import apt_pkg
 import git
+import asyncio
 from reprepro_bundle_compose.bundle_status import BundleStatus
 from reprepro_bundle_compose.managed_bundle import ManagedBundle
 from reprepro_bundle_compose.distribution import Distribution
@@ -68,7 +69,7 @@ def updateBundles(tracApi=None):
             managed_bundles[id] = bundle
         elif bundle and not suite:
             if bundle.getStatus() != BundleStatus.DROPPED:
-                logger.warn("Das verwendete {} kann derzeit physikalisch nicht gefunden werden. Bitte überprüfen!".format(bundle))
+                logger.warn("Das verwendete {} kann derzeit physikalisch nicht von apt-repos gefunden werden. Bitte überprüfen!".format(bundle))
         else:
             bundle.setRepoSuite(suite)
             if bundle.getInfo().get("Target") != bundle.getTarget():
@@ -128,6 +129,13 @@ def parseBundles(repoSuites=None):
     return res
 
 
+async def parseBundlesAsync(executor, repoSuites=None):
+    '''
+        This method calls parseBundles(repoSuites) asynchronously in the provided ThreadPoolExecutor executor.
+    '''
+    return await asyncio.wrap_future(executor.submit(parseBundles, repoSuites))
+
+
 def storeBundles(bundlesDict):
     '''
         Expects a dict of ID to ManagedBundle-Objects and stores it's content in alpabetical
@@ -138,15 +146,22 @@ def storeBundles(bundlesDict):
         logger.debug("Updated file '{}'".format(BUNDLES_LIST_FILE))
 
 
-def getBundleRepoSuites():
+def getBundleRepoSuites(ids=["bundle:"]):
     '''
        This method uses apt-repos to get a list of all currently available (rolled out)
        bundles as a dict of ID to apt_repos.RepoSuite Objects
     '''
     res = dict()
-    for suite in sorted(apt_repos.getSuites(["bundle:"])):
+    for suite in sorted(apt_repos.getSuites(ids)):
         res[suite.getSuiteName()] = suite
     return res
+
+
+async def getBundleRepoSuitesAsync(executor, ids=["bundle:"]):
+    '''
+        This method calls getBundleRepoSuites() asynchronously in the provided ThreadPoolExecutor executor.
+    '''
+    return await asyncio.wrap_future(executor.submit(getBundleRepoSuites, ids))
 
 
 def getTargetRepoSuites(stage=None):
@@ -218,7 +233,7 @@ def splitReleasenotes(info):
     return (subject, text)
 
 
-def markBundlesForStatus(bundles, ids, status, force=False):
+def markBundlesForStatus(bundles, ids, status, force=False, checkOwnSuite=True):
     changed = False
     for (bid, bundle) in sorted(bundles.items()):
         if not bid in ids:
@@ -231,7 +246,7 @@ def markBundlesForStatus(bundles, ids, status, force=False):
             logger.error("{} is not ready for being put into state '{}'!".format(bid, status))
             ids.remove(bid)
             continue
-        if not bundle.getAptSuite():
+        if checkOwnSuite and not bundle.getAptSuite():
             logger.error("{} could not be found by apt-repos (possibly wrong config in .apt-repos)!".format(bid))
             ids.remove(bid)
             continue
@@ -243,6 +258,14 @@ def markBundlesForStatus(bundles, ids, status, force=False):
         logger.error("the following bundles are not defined: '{}'".format("', '".join(ids)))
     if changed:
         storeBundles(bundles)
+
+
+async def markBundlesForStatusAsync(executor, bundles, ids, status, force=False, checkOwnSuite=True):
+    '''
+        This method calls markBundlesForStatus(bundles, ids, status, force, checkOwnSuite) asyncronously in the
+        provided ThreadPoolExecutor executor.
+    '''
+    await asyncio.wrap_future(executor.submit(markBundlesForStatus, bundles, ids, status, force, checkOwnSuite))
 
 
 def markBundlesForTarget(bundles, ids, target):
